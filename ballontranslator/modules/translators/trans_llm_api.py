@@ -30,6 +30,28 @@ class TranslationResponse(BaseModel):
     )
 
 
+# Self-contained inline schema (no $ref/$defs). Pydantic's model_json_schema()
+# emits $ref for the nested element model, which Gemini/Gemma's responseJsonSchema
+# handles poorly, so we hand-roll a flat schema usable by every json_schema provider.
+TRANSLATION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "translation": {"type": "string"},
+                },
+                "required": ["id", "translation"],
+            },
+        }
+    },
+    "required": ["translations"],
+}
+
+
 @register_translator("LLM_API_Translator")
 class LLM_API_Translator(BaseTranslator):
     dependencies = ['openai>=2.8.1', 'httpx[socks,brotli]']
@@ -428,13 +450,19 @@ class LLM_API_Translator(BaseTranslator):
             "max_tokens": self.max_tokens,
         }
 
-        if self.provider == "LLM Studio":
-            self.logger.debug("Using 'json_schema' mode for LLM Studio.")
+        if self.provider in ["LLM Studio", "Google", "Ollama"]:
+            # These providers support schema-constrained decoding. Crucially, Gemma
+            # models on the Google API ignore a bare json_object mime type and only
+            # emit clean JSON when the schema itself is supplied, so always send it.
+            self.logger.debug(f"Using 'json_schema' mode for {self.provider}.")
             api_args["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"schema": TranslationResponse.model_json_schema()},
+                "json_schema": {
+                    "name": "translation_response",
+                    "schema": TRANSLATION_JSON_SCHEMA,
+                },
             }
-        elif self.provider in ["OpenAI", "Grok", "Google", "OpenRouter", "Ollama"]:
+        elif self.provider in ["OpenAI", "Grok", "OpenRouter"]:
             self.logger.debug(f"Using 'json_object' mode for {self.provider}.")
             api_args["response_format"] = {"type": "json_object"}
 
