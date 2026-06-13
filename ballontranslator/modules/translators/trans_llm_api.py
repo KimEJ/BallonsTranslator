@@ -484,6 +484,16 @@ class LLM_API_Translator(BaseTranslator):
             raw_content = completion.choices[0].message.content
             json_to_parse = raw_content.strip()
 
+            # Some models (notably Gemma) prepend a <thought>/<think> reasoning
+            # block before the JSON. Strip it so the brace search below doesn't
+            # latch onto a stray '{' inside the reasoning text.
+            json_to_parse = re.sub(
+                r"<(thought|thinking|think)>.*?</\1>",
+                "",
+                json_to_parse,
+                flags=re.DOTALL | re.IGNORECASE,
+            ).strip()
+
             match = re.search(
                 r"```(?:json)?\s*(\{.*?\})\s*```", json_to_parse, re.DOTALL
             )
