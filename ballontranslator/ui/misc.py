@@ -59,6 +59,11 @@ def pixmap2ndarray(pixmap: Union[QPixmap, QImage], keep_alpha=True):
 def ndarray2pixmap(img, return_qimg=False):
     if len(img.shape) == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    elif img.shape[-1] == 2:
+        # grayscale + alpha: QImage has no 2-channel format, expand gray to RGB
+        img = np.dstack([cv2.cvtColor(img[..., 0], cv2.COLOR_GRAY2RGB), img[..., 1:2]])
+    elif img.shape[-1] == 1:
+        img = cv2.cvtColor(img[..., 0], cv2.COLOR_GRAY2RGB)
     height, width, channel = img.shape
     bytesPerLine = channel * width
     if channel == 4:
